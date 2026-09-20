@@ -7,11 +7,7 @@ export const metadata: Metadata = {
   description: 'Generic Multi-Tenant SaaS Workspace Platform',
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}): React.JSX.Element {
+export default function RootLayout({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
     <html lang="en" className="h-full">
       <body className="h-full bg-background font-sans antialiased">

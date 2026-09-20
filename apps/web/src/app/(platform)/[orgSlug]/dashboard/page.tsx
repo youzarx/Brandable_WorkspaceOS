@@ -97,9 +97,7 @@ export default function DashboardPage(): React.JSX.Element {
                 <Layers className="h-4 w-4 text-purple-400" />
               </CardHeader>
               <CardContent>
-                <div className="text-xl font-bold text-white">
-                  {MODULE_ITEMS.length} Registered
-                </div>
+                <div className="text-xl font-bold text-white">{MODULE_ITEMS.length} Registered</div>
                 <p className="text-xs text-slate-400 mt-1">Modular Platform Monolith</p>
               </CardContent>
             </Card>

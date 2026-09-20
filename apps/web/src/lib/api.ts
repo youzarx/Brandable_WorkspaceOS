@@ -149,11 +149,7 @@ async function refreshAccessTokenSingleAttempt(): Promise<string | null> {
   return refreshPromise;
 }
 
-function buildOptions(
-  method: string,
-  body?: unknown,
-  options?: RequestOptions,
-): RequestOptions {
+function buildOptions(method: string, body?: unknown, options?: RequestOptions): RequestOptions {
   const opts: RequestOptions = { ...options, method };
   if (body !== undefined && body !== null) {
     opts.body = JSON.stringify(body);

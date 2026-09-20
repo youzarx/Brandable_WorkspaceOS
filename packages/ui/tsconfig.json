@@ -10,5 +10,5 @@
     "declarationMap": true
   },
   "include": ["src"],
-  "exclude": ["src/__tests__", "dist", "node_modules"]
+  "exclude": ["dist", "node_modules"]
 }
