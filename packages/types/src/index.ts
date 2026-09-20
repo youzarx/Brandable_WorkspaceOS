@@ -1,6 +1,6 @@
-export type { JwtPayload, AuthenticatedUser, TokenResponse, RefreshTokenResult } from './auth.js';
+export type { JwtPayload, AuthenticatedUser, TokenResponse, RefreshTokenResult } from './auth';
 
-export type { MembershipStatus, ActiveMembership } from './membership.js';
+export type { MembershipStatus, ActiveMembership } from './membership';
 
 export type {
   ApiResponse,
@@ -10,4 +10,4 @@ export type {
   PaginatedResponse,
   PaginationMeta,
   PaginationQuery,
-} from './api.js';
+} from './api';

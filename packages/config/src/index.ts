@@ -1,8 +1,8 @@
-export { PERMISSIONS, ALL_PERMISSION_KEYS, type PermissionKey } from './permissions.js';
+export { PERMISSIONS, ALL_PERMISSION_KEYS, type PermissionKey } from './permissions';
 
-export { SYSTEM_ROLES, type SystemRoleName } from './roles.js';
+export { SYSTEM_ROLES, type SystemRoleName } from './roles';
 
-export { MODULE_KEYS, ALL_MODULE_KEYS, type ModuleKey } from './modules.js';
+export { MODULE_KEYS, ALL_MODULE_KEYS, type ModuleKey } from './modules';
 
 export {
   JWT_ACCESS_EXPIRY_DEFAULT,
@@ -11,6 +11,6 @@ export {
   REFRESH_TOKEN_BYTES,
   COOKIE_CONFIG,
   AUTH_CONFIG,
-} from './auth.js';
+} from './auth';
 
-export { ENV_KEYS } from './env.js';
+export { ENV_KEYS } from './env';

@@ -5,21 +5,21 @@ export {
   type RegisterInput,
   changePasswordSchema,
   type ChangePasswordInput,
-} from './auth.js';
+} from './auth';
 
 export {
   createOrganizationSchema,
   type CreateOrganizationInput,
   updateOrganizationSchema,
   type UpdateOrganizationInput,
-} from './organization.js';
+} from './organization';
 
-export { inviteMemberSchema, type InviteMemberInput } from './membership.js';
+export { inviteMemberSchema, type InviteMemberInput } from './membership';
 
-export { createRoleSchema, type CreateRoleInput } from './role.js';
+export { createRoleSchema, type CreateRoleInput } from './role';
 
-export { toggleModuleSchema, type ToggleModuleInput } from './module.js';
+export { toggleModuleSchema, type ToggleModuleInput } from './module';
 
-export { paginationSchema, type PaginationInput } from './pagination.js';
+export { paginationSchema, type PaginationInput } from './pagination';
 
-export { envSchema, type EnvConfig } from './env.js';
+export { envSchema, type EnvConfig } from './env';

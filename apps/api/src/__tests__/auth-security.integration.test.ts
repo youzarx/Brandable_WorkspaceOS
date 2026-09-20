@@ -224,10 +224,7 @@ describe('Phase 3 Security Invariants', () => {
         jwtAccessExpiry: '15m',
       } as unknown as ApiConfigService;
 
-      const authService = new AuthService(
-        prisma as unknown as PrismaService,
-        mockConfig,
-      );
+      const authService = new AuthService(prisma as unknown as PrismaService, mockConfig);
 
       // Attempting refresh without cookie (empty token string) MUST be rejected with UnauthorizedException
       await expect(authService.refresh('')).rejects.toThrow('Refresh token missing');
