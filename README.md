@@ -59,13 +59,12 @@ pnpm db:migrate
 pnpm db:seed
 ```
 
-The seed creates:
+The seed creates foundation data only:
 
-- 1 development organization (`slug: dev-org`)
-- 1 development user (`dev@platform.local` / `Dev1234!`)
-- 1 Owner membership
-- System roles (OWNER, ADMIN, MEMBER) with permissions
-- All platform modules registered
+- 17 system permissions
+- 3 system roles (`OWNER`, `ADMIN`, `MEMBER`) with role-permission assignments
+- 8 platform modules registered (`projects`, `tasks`, `invoices`, `crm`, `calendar`, `chat`, `content`, `analytics`)
+- **0 users, 0 organizations, 0 memberships** (created via `/api/v1/auth/register` or API endpoints)
 
 ### 5. Start development servers
 
@@ -180,16 +179,14 @@ See [`docs/architecture.md`](docs/architecture.md) for the full architecture doc
 
 ## Development Credentials (Local Only)
 
-> ⚠️ These credentials exist only for local development. Never use them in any deployed environment.
+> ⚠️ These credentials exist only for local development infrastructure. Never use them in any deployed environment.
 
-| Resource            | Value                |
-| ------------------- | -------------------- |
-| PostgreSQL DB       | `platform_dev`       |
-| PostgreSQL User     | `platform`           |
-| PostgreSQL Password | `platform`           |
-| Dev User Email      | `dev@platform.local` |
-| Dev User Password   | `Dev1234!`           |
-| Dev Org Slug        | `dev-org`            |
+| Resource            | Value          | Notes                                                |
+| ------------------- | -------------- | ---------------------------------------------------- |
+| PostgreSQL DB       | `platform_dev` | Local database name                                  |
+| PostgreSQL User     | `platform`     | Local database user                                  |
+| PostgreSQL Password | `platform`     | Local database password                              |
+| User / Org Data     | _Dynamic_      | Created via `/api/v1/auth/register` (0 seeded in DB) |
 
 ---
 
