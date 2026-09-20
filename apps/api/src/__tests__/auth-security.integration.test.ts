@@ -16,6 +16,9 @@ import {
   signAccessToken,
   verifyAccessToken,
 } from '@platform/auth';
+import { AuthService } from '../modules/auth/auth.service.js';
+import type { ApiConfigService } from '../config/api-config.service.js';
+import type { PrismaService } from '../database/prisma.service.js';
 
 if (!process.env['DATABASE_URL']) {
   process.env['DATABASE_URL'] = 'postgresql://platform:platform@127.0.0.1:5432/platform_dev';
@@ -87,9 +90,10 @@ describe('Phase 3 Security Invariants', () => {
       expect(payload.email).toBe('usr1@example.com');
 
       // Assert payload contains NO organizationId, role, or permissions claims
-      expect((payload as any).organizationId).toBeUndefined();
-      expect((payload as any).role).toBeUndefined();
-      expect((payload as any).permissions).toBeUndefined();
+      const record = payload as unknown as Record<string, unknown>;
+      expect(record['organizationId']).toBeUndefined();
+      expect(record['role']).toBeUndefined();
+      expect(record['permissions']).toBeUndefined();
     });
 
     it('rejects access token with invalid signature', () => {
@@ -139,7 +143,8 @@ describe('Phase 3 Security Invariants', () => {
       `;
 
       expect(updatedTokens).toHaveLength(1);
-      expect(updatedTokens[0]!.id).toBeDefined();
+      const firstToken = updatedTokens[0];
+      expect(firstToken?.id).toBeDefined();
 
       // Second attempt with same raw token MUST return 0 updated rows
       const secondAttempt = await prisma.$queryRaw<Array<{ id: string }>>`
@@ -157,16 +162,16 @@ describe('Phase 3 Security Invariants', () => {
     it('revokes entire token family when revoked token reuse is detected', async () => {
       const user = await prisma.user.create({
         data: {
-          email: testEmail('reuse'),
+          email: testEmail('theft'),
           passwordHash: await hashPassword('Pass123!'),
-          firstName: 'Reuse',
+          firstName: 'Theft',
           lastName: 'Test',
         },
       });
 
-      const familyId = generateFamilyId();
       const rawToken1 = generateRawRefreshToken();
       const hash1 = hashRefreshToken(rawToken1);
+      const familyId = generateFamilyId();
 
       // Token 1: already revoked
       await prisma.refreshToken.create({
@@ -211,6 +216,22 @@ describe('Phase 3 Security Invariants', () => {
 
       expect(remainingActive).toHaveLength(0);
     });
+
+    it('enforces strict cookie transport requirement and rejects missing/empty cookie', async () => {
+      const mockConfig = {
+        jwtRefreshExpiryDays: 7,
+        jwtAccessSecret: TEST_JWT_SECRET,
+        jwtAccessExpiry: '15m',
+      } as unknown as ApiConfigService;
+
+      const authService = new AuthService(
+        prisma as unknown as PrismaService,
+        mockConfig,
+      );
+
+      // Attempting refresh without cookie (empty token string) MUST be rejected with UnauthorizedException
+      await expect(authService.refresh('')).rejects.toThrow('Refresh token missing');
+    });
   });
 
   describe('4. Membership & Server-Side Tenant Isolation', () => {
@@ -232,7 +253,7 @@ describe('Phase 3 Security Invariants', () => {
         data: { name: 'Org B', slug: testSlug('orgB') },
       });
 
-      const ownerRole = await prisma.role.findFirst({
+      const ownerRole = await prisma.role.findFirstOrThrow({
         where: { name: 'OWNER', organizationId: null, isSystem: true },
       });
 
@@ -241,7 +262,7 @@ describe('Phase 3 Security Invariants', () => {
         data: {
           userId: userA.id,
           organizationId: orgA.id,
-          roleId: ownerRole!.id,
+          roleId: ownerRole.id,
           status: MembershipStatus.ACTIVE,
         },
       });
@@ -273,7 +294,7 @@ describe('Phase 3 Security Invariants', () => {
         data: { name: 'Org Suspended', slug: testSlug('org-susp') },
       });
 
-      const memberRole = await prisma.role.findFirst({
+      const memberRole = await prisma.role.findFirstOrThrow({
         where: { name: 'MEMBER', organizationId: null, isSystem: true },
       });
 
@@ -281,7 +302,7 @@ describe('Phase 3 Security Invariants', () => {
         data: {
           userId: user.id,
           organizationId: org.id,
-          roleId: memberRole!.id,
+          roleId: memberRole.id,
           status: MembershipStatus.SUSPENDED,
         },
       });
@@ -305,14 +326,14 @@ describe('Phase 3 Security Invariants', () => {
         data: { name: 'Module Org', slug: testSlug('mod-org') },
       });
 
-      const projectsMod = await prisma.module.findFirst({
+      const projectsMod = await prisma.module.findFirstOrThrow({
         where: { key: 'projects' },
       });
 
       await prisma.organizationModule.create({
         data: {
           organizationId: org.id,
-          moduleId: projectsMod!.id,
+          moduleId: projectsMod.id,
           isEnabled: true,
         },
       });
@@ -343,21 +364,21 @@ describe('Phase 3 Security Invariants', () => {
 
   describe('6. Permission Authorization via RolePermission', () => {
     it('verifies effective role permissions through PostgreSQL RolePermission join table', async () => {
-      const ownerRole = await prisma.role.findFirst({
+      const ownerRole = await prisma.role.findFirstOrThrow({
         where: { name: 'OWNER', organizationId: null, isSystem: true },
       });
 
-      const memberRole = await prisma.role.findFirst({
+      const memberRole = await prisma.role.findFirstOrThrow({
         where: { name: 'MEMBER', organizationId: null, isSystem: true },
       });
 
       const ownerPerms = await prisma.rolePermission.findMany({
-        where: { roleId: ownerRole!.id },
+        where: { roleId: ownerRole.id },
         include: { permission: true },
       });
 
       const memberPerms = await prisma.rolePermission.findMany({
-        where: { roleId: memberRole!.id },
+        where: { roleId: memberRole.id },
         include: { permission: true },
       });
 

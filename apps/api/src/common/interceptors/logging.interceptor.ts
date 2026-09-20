@@ -24,7 +24,8 @@ export class LoggingInterceptor implements NestInterceptor {
       tap(() => {
         const duration = Date.now() - startTime;
         const statusCode = response.statusCode;
-        const userId = (request as any).user?.id || 'anonymous';
+        const userId =
+          (request as Request & { user?: { id?: string } }).user?.id || 'anonymous';
 
         this.logger.log(
           JSON.stringify({

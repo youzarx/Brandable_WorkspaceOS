@@ -78,7 +78,7 @@ export class AuthController {
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     this.rateLimiter.checkRateLimit(`refresh:${req.ip}`);
 
-    const rawRefreshToken = req.cookies?.[AUTH_CONFIG.COOKIE_NAME] || req.body?.refreshToken;
+    const rawRefreshToken = req.cookies?.[AUTH_CONFIG.COOKIE_NAME];
 
     const {
       accessToken,
@@ -95,7 +95,7 @@ export class AuthController {
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const rawRefreshToken = req.cookies?.[AUTH_CONFIG.COOKIE_NAME] || req.body?.refreshToken;
+    const rawRefreshToken = req.cookies?.[AUTH_CONFIG.COOKIE_NAME];
 
     await this.authService.logout(rawRefreshToken);
 
@@ -135,10 +135,11 @@ export class AuthController {
   }
 
   private setRefreshTokenCookie(res: Response, rawToken: string): void {
-    const optionsInput: { nodeEnv: string; sameSite?: 'Strict' | 'Lax' | 'None'; domain?: string } = {
-      nodeEnv: this.apiConfig.nodeEnv,
-      sameSite: this.apiConfig.cookieSameSite,
-    };
+    const optionsInput: { nodeEnv: string; sameSite?: 'Strict' | 'Lax' | 'None'; domain?: string } =
+      {
+        nodeEnv: this.apiConfig.nodeEnv,
+        sameSite: this.apiConfig.cookieSameSite,
+      };
     if (this.apiConfig.cookieDomain) {
       optionsInput.domain = this.apiConfig.cookieDomain;
     }
