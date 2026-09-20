@@ -1,0 +1,296 @@
+// Prisma Schema — Platform Foundation
+// =============================================================================
+// This schema defines the database models for the multi-tenant SaaS platform.
+//
+// Source of truth: docs/database.md
+// Cross-references: docs/architecture.md, docs/security.md, ADRs 003–010
+//
+// RULES:
+//   - PostgreSQL is the source of truth. Always.
+//   - MembershipStatus is the ONLY Prisma enum.
+//   - Module keys and permission keys are dynamic strings — no Prisma enums.
+//   - Role partial unique indexes are added via raw SQL in the migration.
+//   - AuditLog is append-only — no updatedAt.
+//   - Soft-deleted identities (email, slug, membership) remain reserved.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// User
+// =============================================================================
+// Represents a human identity in the platform.
+// A user is NOT tied to any single organization.
+// Email is UNIQUE and remains reserved permanently after soft-delete.
+// passwordHash is never returned to the client.
+
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  passwordHash    String
+  firstName       String
+  lastName        String
+  emailVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  // Relations
+  memberships   Membership[]
+  refreshTokens RefreshToken[]
+  auditLogs     AuditLog[]
+
+  @@index([deletedAt])
+}
+
+// =============================================================================
+// Organization
+// =============================================================================
+// The tenant unit. Every resource on the platform belongs to an Organization.
+// slug is UNIQUE and remains reserved permanently after soft-delete.
+// No plan/planExpiresAt — billing is a future phase.
+
+model Organization {
+  id             String    @id @default(cuid())
+  name           String
+  slug           String    @unique
+  logo           String?
+  favicon        String?
+  primaryColor   String?
+  secondaryColor String?
+  brandingConfig Json?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  // Relations
+  memberships         Membership[]
+  roles               Role[]
+  organizationModules OrganizationModule[]
+  auditLogs           AuditLog[]
+
+  @@index([deletedAt])
+}
+
+// =============================================================================
+// Membership
+// =============================================================================
+// Join entity: User ↔ Organization with a specific Role.
+// This is the tenant context object.
+//
+// Soft-delete policy: Only one record per (userId, organizationId) pair — ever.
+// Reactivation updates the existing record. Never create a duplicate.
+//
+// Status enum: PENDING | ACTIVE | SUSPENDED
+
+enum MembershipStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+
+model Membership {
+  id             String           @id @default(cuid())
+  userId         String
+  organizationId String
+  roleId         String
+  status         MembershipStatus @default(PENDING)
+  invitedAt      DateTime?
+  joinedAt       DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  deletedAt      DateTime?
+
+  // Relations
+  user         User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  role         Role         @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  // Constraints: single-record policy for user+org pair
+  @@unique([userId, organizationId])
+  @@index([organizationId, status])
+  @@index([userId, status])
+  @@index([deletedAt])
+}
+
+// =============================================================================
+// Role
+// =============================================================================
+// Defines a named set of permissions.
+// System roles: organizationId IS NULL, isSystem = true (OWNER, ADMIN, MEMBER)
+// Org-specific roles: organizationId IS NOT NULL, isSystem = false
+//
+// Uniqueness is enforced via PARTIAL INDEXES in the migration (raw SQL):
+//   - System roles: UNIQUE(name) WHERE organizationId IS NULL
+//   - Org roles: UNIQUE(name, organizationId) WHERE organizationId IS NOT NULL
+//
+// Prisma's @@unique cannot express partial indexes.
+
+model Role {
+  id             String   @id @default(cuid())
+  name           String
+  description    String?
+  organizationId String?
+  isSystem       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  organization    Organization?    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  memberships     Membership[]
+  rolePermissions RolePermission[]
+
+  @@index([organizationId])
+}
+
+// =============================================================================
+// Permission
+// =============================================================================
+// A named capability key. Global (not per-org).
+// Assigned to roles via RolePermission.
+// Key format: <resource>.<action>
+// Permission keys are extensible strings — NOT an enum.
+//
+// Note: Per docs/database.md, Permission has createdAt only (no updatedAt).
+
+model Permission {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  rolePermissions RolePermission[]
+}
+
+// =============================================================================
+// RolePermission
+// =============================================================================
+// Join table: Role ↔ Permission
+// Composite primary key prevents duplicate assignments.
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  // Relations
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+// =============================================================================
+// Module
+// =============================================================================
+// System registry of available platform modules.
+// Keys are dynamic strings — NO TypeScript/Prisma enum.
+// Adding a module = inserting a row. No code changes needed.
+//
+// Per docs/database.md, Module has createdAt only (no updatedAt).
+
+model Module {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  organizationModules OrganizationModule[]
+}
+
+// =============================================================================
+// OrganizationModule
+// =============================================================================
+// Per-tenant module configuration.
+//
+// CRITICAL: There is NO moduleKey column.
+// The key is resolved via JOIN:
+//   OrganizationModule.moduleId → Module.id → Module.key
+// This is the ONLY module-key resolution path.
+
+model OrganizationModule {
+  id             String   @id @default(cuid())
+  organizationId String
+  moduleId       String
+  isEnabled      Boolean  @default(false)
+  config         Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  module       Module       @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, moduleId])
+  @@index([organizationId, isEnabled])
+}
+
+// =============================================================================
+// RefreshToken
+// =============================================================================
+// Stores HASHED refresh tokens for session management.
+// Raw token is NEVER stored — only SHA-256 hash.
+//
+// Token theft detection:
+//   - familyId groups tokens in a rotation chain
+//   - revokedAt: NULL = active, SET = rotated/revoked
+//   - If revoked token reused + active tokens in family → SESSION_COMPROMISED
+//   - If revoked token reused + no active tokens → INVALID_TOKEN
+//
+// Per docs/database.md, RefreshToken has createdAt only (no updatedAt).
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  familyId  String
+  expiresAt DateTime
+  revokedAt DateTime?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime  @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([familyId])
+}
+
+// =============================================================================
+// AuditLog
+// =============================================================================
+// Immutable event log. APPEND-ONLY.
+// No updatedAt. No soft-delete. No updates.
+//
+// organizationId scopes audit to tenant.
+// userId is nullable for system-generated events.
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String?
+  action         String
+  resource       String
+  resourceId     String?
+  metadata       Json?
+  ipAddress      String?
+  createdAt      DateTime @default(now())
+
+  // Relations
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+}

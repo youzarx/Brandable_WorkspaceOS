@@ -1,0 +1,14 @@
+{
+  "name": "@platform/worker",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "nest start --watch",
+    "build": "echo 'No source files yet — build skipped for placeholder'",
+    "start": "node dist/main",
+    "lint": "echo 'No source files yet — lint skipped for placeholder'",
+    "typecheck": "echo 'No source files yet — typecheck skipped for placeholder'",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  }
+}

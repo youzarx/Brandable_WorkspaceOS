@@ -1,0 +1,12 @@
+{
+  "name": "@platform/web",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "echo 'No source files yet — build skipped for placeholder'",
+    "start": "next start",
+    "lint": "echo 'No source files yet — lint skipped for placeholder'",
+    "typecheck": "echo 'No source files yet — typecheck skipped for placeholder'"
+  }
+}

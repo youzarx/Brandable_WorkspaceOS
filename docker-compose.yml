@@ -1,0 +1,23 @@
+# Docker Compose — Local Development
+# Phase 2: PostgreSQL only. Redis will be added in a later phase.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: platform-postgres
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_USER: platform
+      POSTGRES_PASSWORD: platform
+      POSTGRES_DB: platform_dev
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U platform -d platform_dev']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
