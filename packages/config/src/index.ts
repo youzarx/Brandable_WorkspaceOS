@@ -10,6 +10,7 @@ export {
   BCRYPT_ROUNDS_DEFAULT,
   REFRESH_TOKEN_BYTES,
   COOKIE_CONFIG,
+  AUTH_CONFIG,
 } from './auth.js';
 
 export { ENV_KEYS } from './env.js';

@@ -9,6 +9,7 @@ export type MembershipStatus = 'PENDING' | 'ACTIVE' | 'SUSPENDED';
  * organizationId comes from the DB Membership record — never from client input.
  */
 export interface ActiveMembership {
+  id: string;
   membershipId: string;
   userId: string;
   organizationId: string;
@@ -17,4 +18,5 @@ export interface ActiveMembership {
   roleId: string;
   roleName: string;
   permissions: string[];
+  status: MembershipStatus;
 }

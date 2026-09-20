@@ -8,7 +8,7 @@
     "start": "node dist/main",
     "lint": "echo 'No source files yet — lint skipped for placeholder'",
     "typecheck": "echo 'No source files yet — typecheck skipped for placeholder'",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "test": "echo 'No source files yet — test skipped for placeholder'",
+    "test:watch": "echo 'No source files yet — test skipped for placeholder'"
   }
 }

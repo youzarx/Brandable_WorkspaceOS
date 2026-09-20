@@ -18,6 +18,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PrismaClient, MembershipStatus } from '@prisma/client';
 
+if (!process.env['DATABASE_URL']) {
+  process.env['DATABASE_URL'] = 'postgresql://platform:platform@127.0.0.1:5432/platform_dev';
+}
 const prisma = new PrismaClient();
 
 // ---------------------------------------------------------------------------

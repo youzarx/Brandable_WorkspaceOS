@@ -3,14 +3,11 @@ import path from 'path';
 import fs from 'fs';
 
 async function main() {
-  console.log('🚀 Initializing fresh embedded PostgreSQL cluster...');
-
   const databaseDir = path.join(process.cwd(), '.pgdata');
 
-  if (fs.existsSync(databaseDir)) {
-    fs.rmSync(databaseDir, { recursive: true, force: true });
+  if (!fs.existsSync(databaseDir)) {
+    fs.mkdirSync(databaseDir, { recursive: true });
   }
-  fs.mkdirSync(databaseDir, { recursive: true });
 
   const pg = new EmbeddedPostgres({
     databaseDir,
@@ -20,10 +17,20 @@ async function main() {
     persistent: true,
   });
 
-  await pg.initialise();
-  await pg.start();
+  const isInitialized = fs.existsSync(path.join(databaseDir, 'PG_VERSION'));
+  if (!isInitialized) {
+    const files = fs.readdirSync(databaseDir);
+    if (files.length > 0) {
+      fs.rmSync(databaseDir, { recursive: true, force: true });
+      fs.mkdirSync(databaseDir, { recursive: true });
+    }
+    console.log('🌱 Initializing new PostgreSQL cluster...');
+    await pg.initialise();
+  }
 
-  console.log('✅ PostgreSQL engine started with superuser "platform" on port 5432!');
+  console.log('🚀 Starting PostgreSQL server on port 5432...');
+  await pg.start();
+  console.log('✅ PostgreSQL is running on port 5432 (user: platform, pass: platform)!');
 
   process.on('SIGINT', async () => {
     console.log('Stopping PostgreSQL...');

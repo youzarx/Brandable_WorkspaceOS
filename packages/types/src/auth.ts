@@ -19,8 +19,11 @@ export interface JwtPayload {
  * Used by JwtAuthGuard to populate req.user.
  */
 export interface AuthenticatedUser {
+  id: string;
   userId: string;
   email: string;
+  firstName?: string;
+  lastName?: string;
 }
 
 /**
