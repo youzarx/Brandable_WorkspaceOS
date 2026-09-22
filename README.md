@@ -10,8 +10,8 @@ A configurable, white-label, multi-tenant SaaS platform foundation.
 
 | Tool    | Minimum Version |
 | ------- | --------------- |
-| Node.js | 20.x            |
-| pnpm    | 9.x             |
+| Node.js | >=20.x          |
+| pnpm    | 10.x            |
 | Docker  | 24.x            |
 | Git     | 2.x             |
 
