@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service.js';
 import { hashPassword, generateRawRefreshToken } from '@platform/auth';
@@ -12,6 +13,25 @@ import type { InviteMemberInput, UpdateMemberRoleInput } from '@platform/validat
 @Injectable()
 export class MemberService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private async getActorRole(organizationId: string, currentUserId: string) {
+    const actorMembership = await this.prisma.membership.findFirst({
+      where: {
+        userId: currentUserId,
+        organizationId,
+        deletedAt: null,
+        status: MembershipStatus.ACTIVE,
+        organization: { deletedAt: null },
+      },
+      include: { role: true },
+    });
+
+    if (!actorMembership) {
+      throw new ForbiddenException('Active membership required in organization');
+    }
+
+    return actorMembership.role;
+  }
 
   async listMembers(organizationId: string): Promise<unknown[]> {
     const memberships = await this.prisma.membership.findMany({
@@ -60,6 +80,8 @@ export class MemberService {
     currentUserId: string,
     input: InviteMemberInput,
   ): Promise<unknown> {
+    const actorRole = await this.getActorRole(organizationId, currentUserId);
+
     // 1. Verify Role exists and is accessible for this org
     const role = await this.prisma.role.findFirst({
       where: {
@@ -72,7 +94,12 @@ export class MemberService {
       throw new BadRequestException('Invalid role specified');
     }
 
-    // 2. Check if user already exists
+    // 2. Ownership Privilege Rule: Only active OWNER can assign OWNER role
+    if (role.name === 'OWNER' && actorRole.name !== 'OWNER') {
+      throw new ForbiddenException('Only an active OWNER can assign the OWNER role');
+    }
+
+    // 3. Check if user already exists
     const existingUser = await this.prisma.user.findUnique({
       where: { email: input.email },
     });
@@ -186,7 +213,7 @@ export class MemberService {
       return newMembership;
     }
 
-    // 3. User does not exist — create invited user identity & membership
+    // 4. User does not exist — create invited user identity & membership
     const placeholderPassword = await hashPassword(generateRawRefreshToken());
     const result = await this.prisma.$transaction(async (tx) => {
       const newUser = await tx.user.create({
@@ -250,6 +277,8 @@ export class MemberService {
     currentUserId: string,
     input: UpdateMemberRoleInput,
   ): Promise<unknown> {
+    const actorRole = await this.getActorRole(organizationId, currentUserId);
+
     const targetMembership = await this.prisma.membership.findFirst({
       where: {
         id: membershipId,
@@ -274,7 +303,17 @@ export class MemberService {
       throw new BadRequestException('Invalid role specified');
     }
 
-    // Safety Check: Sole OWNER protection
+    // 1. Escalation check: Only active OWNER can assign OWNER role
+    if (newRole.name === 'OWNER' && actorRole.name !== 'OWNER') {
+      throw new ForbiddenException('Only an active OWNER can assign the OWNER role');
+    }
+
+    // 2. Modifying OWNER check: Only active OWNER can modify an OWNER membership
+    if (targetMembership.role.name === 'OWNER' && actorRole.name !== 'OWNER') {
+      throw new ForbiddenException('Only an active OWNER can modify an OWNER membership');
+    }
+
+    // 3. Sole OWNER protection check
     if (targetMembership.role.name === 'OWNER' && newRole.name !== 'OWNER') {
       const ownerCount = await this.prisma.membership.count({
         where: {
@@ -341,6 +380,8 @@ export class MemberService {
     membershipId: string,
     currentUserId: string,
   ): Promise<{ message: string }> {
+    const actorRole = await this.getActorRole(organizationId, currentUserId);
+
     const targetMembership = await this.prisma.membership.findFirst({
       where: {
         id: membershipId,
@@ -354,7 +395,12 @@ export class MemberService {
       throw new NotFoundException('Member not found in organization');
     }
 
-    // Safety Check: Sole OWNER protection
+    // 1. Modifying/removing OWNER check: Only active OWNER can remove an OWNER membership
+    if (targetMembership.role.name === 'OWNER' && actorRole.name !== 'OWNER') {
+      throw new ForbiddenException('Only an active OWNER can remove an OWNER membership');
+    }
+
+    // 2. Sole OWNER protection check
     if (targetMembership.role.name === 'OWNER') {
       const ownerCount = await this.prisma.membership.count({
         where: {

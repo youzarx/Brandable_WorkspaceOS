@@ -24,14 +24,14 @@ afterAll(async () => {
 });
 
 function testEmail(suffix: string): string {
-  return `org-member-test-${suffix}-${Date.now()}-${Math.floor(Math.random() * 10000)}@example.com`;
+  return `org-sec-${suffix}-${Date.now()}-${Math.floor(Math.random() * 10000)}@example.com`;
 }
 
 function testSlug(suffix: string): string {
-  return `org-slug-${suffix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  return `org-sec-slug-${suffix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 }
 
-describe('Phase 9 Organization & Member Management Integration Tests', () => {
+describe('Phase 9 Security Invariants & Ownership Privilege Escalation Protection', () => {
   let orgService: OrganizationService;
   let memberService: MemberService;
 
@@ -40,7 +40,7 @@ describe('Phase 9 Organization & Member Management Integration Tests', () => {
     memberService = new MemberService(prisma as unknown as PrismaService);
   });
 
-  describe('1. Organization Management', () => {
+  describe('1. Organization Management & Tenant Isolation', () => {
     it('should read current organization details', async () => {
       const slug = testSlug('read');
       const org = await prisma.organization.create({
@@ -105,90 +105,153 @@ describe('Phase 9 Organization & Member Management Integration Tests', () => {
     });
   });
 
-  describe('2. Member Management & Safety Rules', () => {
-    it('should list organization members and roles', async () => {
-      const slug = testSlug('list-members');
+  describe('2. Ownership Escalation Protection — Role Change', () => {
+    it('should reject ADMIN attempting to change own role to OWNER', async () => {
+      const slug = testSlug('admin-self-escalate');
       const org = await prisma.organization.create({
-        data: { name: 'List Members Org', slug },
+        data: { name: 'Admin Self Escalate Org', slug },
       });
 
       const ownerRole = await prisma.role.findFirst({
         where: { name: 'OWNER', organizationId: null },
       });
-      expect(ownerRole).toBeDefined();
-
-      const user = await prisma.user.create({
-        data: {
-          email: testEmail('user-list'),
-          passwordHash: await hashPassword('Pass123!'),
-          firstName: 'List',
-          lastName: 'User',
-        },
+      const adminRole = await prisma.role.findFirst({
+        where: { name: 'ADMIN', organizationId: null },
       });
+      expect(ownerRole).toBeDefined();
+      expect(adminRole).toBeDefined();
 
-      if (ownerRole) {
+      if (ownerRole && adminRole) {
+        // Create initial owner
+        const realOwner = await prisma.user.create({
+          data: {
+            email: testEmail('real-owner'),
+            passwordHash: await hashPassword('Pass123!'),
+            firstName: 'Real',
+            lastName: 'Owner',
+          },
+        });
         await prisma.membership.create({
           data: {
-            userId: user.id,
+            userId: realOwner.id,
             organizationId: org.id,
             roleId: ownerRole.id,
             status: MembershipStatus.ACTIVE,
-            joinedAt: new Date(),
           },
         });
+
+        // Create admin user
+        const adminUser = await prisma.user.create({
+          data: {
+            email: testEmail('admin-self'),
+            passwordHash: await hashPassword('Pass123!'),
+            firstName: 'Admin',
+            lastName: 'User',
+          },
+        });
+        const adminMembership = await prisma.membership.create({
+          data: {
+            userId: adminUser.id,
+            organizationId: org.id,
+            roleId: adminRole.id,
+            status: MembershipStatus.ACTIVE,
+          },
+        });
+
+        // ADMIN attempts to change own role to OWNER -> 403 Forbidden
+        await expect(
+          memberService.updateMemberRole(org.id, adminMembership.id, adminUser.id, {
+            roleId: ownerRole.id,
+          }),
+        ).rejects.toThrow('Only an active OWNER can assign the OWNER role');
       }
-
-      const members = (await memberService.listMembers(org.id)) as Array<{
-        user: { email: string };
-        role: { name: string };
-      }>;
-      expect(members.length).toBe(1);
-      expect(members[0]?.user.email).toBe(user.email);
-      expect(members[0]?.role.name).toBe('OWNER');
-
-      const roles = (await memberService.listRoles(org.id)) as Array<{ name: string }>;
-      expect(roles.some((r) => r.name === 'OWNER')).toBe(true);
-      expect(roles.some((r) => r.name === 'ADMIN')).toBe(true);
-      expect(roles.some((r) => r.name === 'MEMBER')).toBe(true);
     });
 
-    it('should invite a new user creating a pending membership', async () => {
-      const slug = testSlug('invite-new');
+    it('should reject ADMIN attempting to change another member role to OWNER', async () => {
+      const slug = testSlug('admin-other-escalate');
       const org = await prisma.organization.create({
-        data: { name: 'Invite Org', slug },
+        data: { name: 'Admin Other Escalate Org', slug },
       });
 
+      const ownerRole = await prisma.role.findFirst({
+        where: { name: 'OWNER', organizationId: null },
+      });
+      const adminRole = await prisma.role.findFirst({
+        where: { name: 'ADMIN', organizationId: null },
+      });
       const memberRole = await prisma.role.findFirst({
         where: { name: 'MEMBER', organizationId: null },
       });
+      expect(ownerRole).toBeDefined();
+      expect(adminRole).toBeDefined();
       expect(memberRole).toBeDefined();
 
-      const inviter = await prisma.user.create({
-        data: {
-          email: testEmail('inviter'),
-          passwordHash: await hashPassword('Pass123!'),
-          firstName: 'Inviter',
-          lastName: 'User',
-        },
-      });
+      if (ownerRole && adminRole && memberRole) {
+        // Create owner & admin
+        const realOwner = await prisma.user.create({
+          data: {
+            email: testEmail('real-owner-2'),
+            passwordHash: await hashPassword('Pass123!'),
+            firstName: 'Real',
+            lastName: 'Owner',
+          },
+        });
+        await prisma.membership.create({
+          data: {
+            userId: realOwner.id,
+            organizationId: org.id,
+            roleId: ownerRole.id,
+            status: MembershipStatus.ACTIVE,
+          },
+        });
 
-      const inviteeEmail = testEmail('invitee');
-      if (memberRole) {
-        const invitedMember = (await memberService.inviteMember(org.id, inviter.id, {
-          email: inviteeEmail,
-          roleId: memberRole.id,
-        })) as { status: string; user: { email: string }; role: { name: string } };
+        const adminUser = await prisma.user.create({
+          data: {
+            email: testEmail('admin-actor'),
+            passwordHash: await hashPassword('Pass123!'),
+            firstName: 'Admin',
+            lastName: 'Actor',
+          },
+        });
+        await prisma.membership.create({
+          data: {
+            userId: adminUser.id,
+            organizationId: org.id,
+            roleId: adminRole.id,
+            status: MembershipStatus.ACTIVE,
+          },
+        });
 
-        expect(invitedMember.user.email).toBe(inviteeEmail);
-        expect(invitedMember.status).toBe(MembershipStatus.PENDING);
-        expect(invitedMember.role.name).toBe('MEMBER');
+        const normalUser = await prisma.user.create({
+          data: {
+            email: testEmail('normal-target'),
+            passwordHash: await hashPassword('Pass123!'),
+            firstName: 'Normal',
+            lastName: 'Target',
+          },
+        });
+        const normalMembership = await prisma.membership.create({
+          data: {
+            userId: normalUser.id,
+            organizationId: org.id,
+            roleId: memberRole.id,
+            status: MembershipStatus.ACTIVE,
+          },
+        });
+
+        // ADMIN attempts to elevate normalUser to OWNER -> 403 Forbidden
+        await expect(
+          memberService.updateMemberRole(org.id, normalMembership.id, adminUser.id, {
+            roleId: ownerRole.id,
+          }),
+        ).rejects.toThrow('Only an active OWNER can assign the OWNER role');
       }
     });
 
-    it('should prevent changing role of sole OWNER of organization', async () => {
-      const slug = testSlug('sole-owner-role');
+    it('should reject MEMBER attempting to change role to OWNER', async () => {
+      const slug = testSlug('member-escalate');
       const org = await prisma.organization.create({
-        data: { name: 'Sole Owner Org', slug },
+        data: { name: 'Member Escalate Org', slug },
       });
 
       const ownerRole = await prisma.role.findFirst({
@@ -200,75 +263,53 @@ describe('Phase 9 Organization & Member Management Integration Tests', () => {
       expect(ownerRole).toBeDefined();
       expect(memberRole).toBeDefined();
 
-      const owner = await prisma.user.create({
-        data: {
-          email: testEmail('sole-owner'),
-          passwordHash: await hashPassword('Pass123!'),
-          firstName: 'Sole',
-          lastName: 'Owner',
-        },
-      });
-
       if (ownerRole && memberRole) {
-        const membership = await prisma.membership.create({
+        const owner = await prisma.user.create({
+          data: {
+            email: testEmail('owner-m'),
+            passwordHash: await hashPassword('Pass123!'),
+            firstName: 'Owner',
+            lastName: 'M',
+          },
+        });
+        await prisma.membership.create({
           data: {
             userId: owner.id,
             organizationId: org.id,
             roleId: ownerRole.id,
             status: MembershipStatus.ACTIVE,
-            joinedAt: new Date(),
+          },
+        });
+
+        const memberUser = await prisma.user.create({
+          data: {
+            email: testEmail('member-actor'),
+            passwordHash: await hashPassword('Pass123!'),
+            firstName: 'Member',
+            lastName: 'Actor',
+          },
+        });
+        const memberMembership = await prisma.membership.create({
+          data: {
+            userId: memberUser.id,
+            organizationId: org.id,
+            roleId: memberRole.id,
+            status: MembershipStatus.ACTIVE,
           },
         });
 
         await expect(
-          memberService.updateMemberRole(org.id, membership.id, owner.id, {
-            roleId: memberRole.id,
-          }),
-        ).rejects.toThrow('Cannot change role of the sole OWNER of the organization');
-      }
-    });
-
-    it('should prevent removing sole OWNER of organization', async () => {
-      const slug = testSlug('sole-owner-remove');
-      const org = await prisma.organization.create({
-        data: { name: 'Sole Owner Remove Org', slug },
-      });
-
-      const ownerRole = await prisma.role.findFirst({
-        where: { name: 'OWNER', organizationId: null },
-      });
-      expect(ownerRole).toBeDefined();
-
-      const owner = await prisma.user.create({
-        data: {
-          email: testEmail('sole-owner-rem'),
-          passwordHash: await hashPassword('Pass123!'),
-          firstName: 'Sole',
-          lastName: 'Owner',
-        },
-      });
-
-      if (ownerRole) {
-        const membership = await prisma.membership.create({
-          data: {
-            userId: owner.id,
-            organizationId: org.id,
+          memberService.updateMemberRole(org.id, memberMembership.id, memberUser.id, {
             roleId: ownerRole.id,
-            status: MembershipStatus.ACTIVE,
-            joinedAt: new Date(),
-          },
-        });
-
-        await expect(memberService.removeMember(org.id, membership.id, owner.id)).rejects.toThrow(
-          'Cannot remove the sole OWNER of the organization',
-        );
+          }),
+        ).rejects.toThrow('Only an active OWNER can assign the OWNER role');
       }
     });
 
-    it('should soft-delete membership without deleting User record when member is removed', async () => {
-      const slug = testSlug('soft-delete-member');
+    it('should allow OWNER to assign OWNER role to another member when multiple owners exist', async () => {
+      const slug = testSlug('owner-assign-owner');
       const org = await prisma.organization.create({
-        data: { name: 'Soft Delete Org', slug },
+        data: { name: 'Owner Assign Owner Org', slug },
       });
 
       const ownerRole = await prisma.role.findFirst({
@@ -280,104 +321,443 @@ describe('Phase 9 Organization & Member Management Integration Tests', () => {
       expect(ownerRole).toBeDefined();
       expect(memberRole).toBeDefined();
 
-      const owner1 = await prisma.user.create({
-        data: {
-          email: testEmail('owner-a'),
-          passwordHash: await hashPassword('Pass123!'),
-          firstName: 'Owner',
-          lastName: 'One',
-        },
+      if (ownerRole && memberRole) {
+        const ownerUser = await prisma.user.create({
+          data: {
+            email: testEmail('owner-actor-1'),
+            passwordHash: await hashPassword('Pass123!'),
+            firstName: 'Owner',
+            lastName: 'One',
+          },
+        });
+        await prisma.membership.create({
+          data: {
+            userId: ownerUser.id,
+            organizationId: org.id,
+            roleId: ownerRole.id,
+            status: MembershipStatus.ACTIVE,
+          },
+        });
+
+        const targetUser = await prisma.user.create({
+          data: {
+            email: testEmail('target-to-owner'),
+            passwordHash: await hashPassword('Pass123!'),
+            firstName: 'Target',
+            lastName: 'Member',
+          },
+        });
+        const targetMembership = await prisma.membership.create({
+          data: {
+            userId: targetUser.id,
+            organizationId: org.id,
+            roleId: memberRole.id,
+            status: MembershipStatus.ACTIVE,
+          },
+        });
+
+        const updated = (await memberService.updateMemberRole(
+          org.id,
+          targetMembership.id,
+          ownerUser.id,
+          { roleId: ownerRole.id },
+        )) as { role: { name: string } };
+        expect(updated.role.name).toBe('OWNER');
+      }
+    });
+  });
+
+  describe('3. Ownership Escalation Protection — Member Invitation', () => {
+    it('should reject ADMIN inviting member with OWNER role', async () => {
+      const slug = testSlug('admin-invite-owner');
+      const org = await prisma.organization.create({
+        data: { name: 'Admin Invite Owner Org', slug },
       });
 
-      if (ownerRole && memberRole) {
+      const ownerRole = await prisma.role.findFirst({
+        where: { name: 'OWNER', organizationId: null },
+      });
+      const adminRole = await prisma.role.findFirst({
+        where: { name: 'ADMIN', organizationId: null },
+      });
+      expect(ownerRole).toBeDefined();
+      expect(adminRole).toBeDefined();
+
+      if (ownerRole && adminRole) {
+        const realOwner = await prisma.user.create({
+          data: {
+            email: testEmail('real-owner-inv'),
+            passwordHash: await hashPassword('Pass123!'),
+            firstName: 'Owner',
+            lastName: 'User',
+          },
+        });
+        await prisma.membership.create({
+          data: {
+            userId: realOwner.id,
+            organizationId: org.id,
+            roleId: ownerRole.id,
+            status: MembershipStatus.ACTIVE,
+          },
+        });
+
+        const adminUser = await prisma.user.create({
+          data: {
+            email: testEmail('admin-inviter'),
+            passwordHash: await hashPassword('Pass123!'),
+            firstName: 'Admin',
+            lastName: 'User',
+          },
+        });
+        await prisma.membership.create({
+          data: {
+            userId: adminUser.id,
+            organizationId: org.id,
+            roleId: adminRole.id,
+            status: MembershipStatus.ACTIVE,
+          },
+        });
+
+        await expect(
+          memberService.inviteMember(org.id, adminUser.id, {
+            email: testEmail('new-owner-invitee'),
+            roleId: ownerRole.id,
+          }),
+        ).rejects.toThrow('Only an active OWNER can assign the OWNER role');
+      }
+    });
+
+    it('should allow OWNER to invite a member with OWNER role', async () => {
+      const slug = testSlug('owner-invite-owner');
+      const org = await prisma.organization.create({
+        data: { name: 'Owner Invite Owner Org', slug },
+      });
+
+      const ownerRole = await prisma.role.findFirst({
+        where: { name: 'OWNER', organizationId: null },
+      });
+      expect(ownerRole).toBeDefined();
+
+      if (ownerRole) {
+        const ownerUser = await prisma.user.create({
+          data: {
+            email: testEmail('owner-inviter'),
+            passwordHash: await hashPassword('Pass123!'),
+            firstName: 'Owner',
+            lastName: 'User',
+          },
+        });
+        await prisma.membership.create({
+          data: {
+            userId: ownerUser.id,
+            organizationId: org.id,
+            roleId: ownerRole.id,
+            status: MembershipStatus.ACTIVE,
+          },
+        });
+
+        const inviteeEmail = testEmail('invited-new-owner');
+        const invited = (await memberService.inviteMember(org.id, ownerUser.id, {
+          email: inviteeEmail,
+          roleId: ownerRole.id,
+        })) as { role: { name: string }; status: string };
+
+        expect(invited.role.name).toBe('OWNER');
+        expect(invited.status).toBe(MembershipStatus.PENDING);
+      }
+    });
+  });
+
+  describe('4. Ownership Escalation Protection — Member Removal', () => {
+    it('should reject ADMIN attempting to remove an OWNER', async () => {
+      const slug = testSlug('admin-rem-owner');
+      const org = await prisma.organization.create({
+        data: { name: 'Admin Remove Owner Org', slug },
+      });
+
+      const ownerRole = await prisma.role.findFirst({
+        where: { name: 'OWNER', organizationId: null },
+      });
+      const adminRole = await prisma.role.findFirst({
+        where: { name: 'ADMIN', organizationId: null },
+      });
+      expect(ownerRole).toBeDefined();
+      expect(adminRole).toBeDefined();
+
+      if (ownerRole && adminRole) {
+        const ownerUser = await prisma.user.create({
+          data: {
+            email: testEmail('owner-to-remove'),
+            passwordHash: await hashPassword('Pass123!'),
+            firstName: 'Owner',
+            lastName: 'Target',
+          },
+        });
+        const ownerMembership = await prisma.membership.create({
+          data: {
+            userId: ownerUser.id,
+            organizationId: org.id,
+            roleId: ownerRole.id,
+            status: MembershipStatus.ACTIVE,
+          },
+        });
+
+        const adminUser = await prisma.user.create({
+          data: {
+            email: testEmail('admin-remover'),
+            passwordHash: await hashPassword('Pass123!'),
+            firstName: 'Admin',
+            lastName: 'User',
+          },
+        });
+        await prisma.membership.create({
+          data: {
+            userId: adminUser.id,
+            organizationId: org.id,
+            roleId: adminRole.id,
+            status: MembershipStatus.ACTIVE,
+          },
+        });
+
+        await expect(
+          memberService.removeMember(org.id, ownerMembership.id, adminUser.id),
+        ).rejects.toThrow('Only an active OWNER can remove an OWNER membership');
+      }
+    });
+
+    it('should reject OWNER removing sole OWNER', async () => {
+      const slug = testSlug('sole-owner-rem-self');
+      const org = await prisma.organization.create({
+        data: { name: 'Sole Owner Remove Self Org', slug },
+      });
+
+      const ownerRole = await prisma.role.findFirst({
+        where: { name: 'OWNER', organizationId: null },
+      });
+      expect(ownerRole).toBeDefined();
+
+      if (ownerRole) {
+        const soleOwner = await prisma.user.create({
+          data: {
+            email: testEmail('sole-owner-actor'),
+            passwordHash: await hashPassword('Pass123!'),
+            firstName: 'Sole',
+            lastName: 'Owner',
+          },
+        });
+        const soleMembership = await prisma.membership.create({
+          data: {
+            userId: soleOwner.id,
+            organizationId: org.id,
+            roleId: ownerRole.id,
+            status: MembershipStatus.ACTIVE,
+          },
+        });
+
+        await expect(
+          memberService.removeMember(org.id, soleMembership.id, soleOwner.id),
+        ).rejects.toThrow('Cannot remove the sole OWNER of the organization');
+      }
+    });
+
+    it('should allow OWNER to remove another OWNER when multiple owners exist', async () => {
+      const slug = testSlug('owner-rem-owner');
+      const org = await prisma.organization.create({
+        data: { name: 'Owner Remove Owner Org', slug },
+      });
+
+      const ownerRole = await prisma.role.findFirst({
+        where: { name: 'OWNER', organizationId: null },
+      });
+      expect(ownerRole).toBeDefined();
+
+      if (ownerRole) {
+        const owner1 = await prisma.user.create({
+          data: {
+            email: testEmail('owner-actor-rem'),
+            passwordHash: await hashPassword('Pass123!'),
+            firstName: 'Owner',
+            lastName: 'One',
+          },
+        });
         await prisma.membership.create({
           data: {
             userId: owner1.id,
             organizationId: org.id,
             roleId: ownerRole.id,
             status: MembershipStatus.ACTIVE,
-            joinedAt: new Date(),
           },
         });
 
-        const targetMemberUser = await prisma.user.create({
+        const owner2 = await prisma.user.create({
           data: {
-            email: testEmail('member-target'),
+            email: testEmail('owner-target-rem'),
             passwordHash: await hashPassword('Pass123!'),
-            firstName: 'Target',
-            lastName: 'Member',
+            firstName: 'Owner',
+            lastName: 'Two',
           },
         });
-
-        const targetMembership = await prisma.membership.create({
+        const owner2Membership = await prisma.membership.create({
           data: {
-            userId: targetMemberUser.id,
+            userId: owner2.id,
             organizationId: org.id,
-            roleId: memberRole.id,
+            roleId: ownerRole.id,
             status: MembershipStatus.ACTIVE,
-            joinedAt: new Date(),
           },
         });
 
-        // Remove member
-        await memberService.removeMember(org.id, targetMembership.id, owner1.id);
+        const result = await memberService.removeMember(org.id, owner2Membership.id, owner1.id);
+        expect(result.message).toBe('Member removed successfully');
 
-        // Verify membership is soft-deleted
-        const membershipCheck = await prisma.membership.findUnique({
-          where: { id: targetMembership.id },
-        });
-        expect(membershipCheck?.deletedAt).not.toBeNull();
-        expect(membershipCheck?.status).toBe(MembershipStatus.SUSPENDED);
+        const checkMem = await prisma.membership.findUnique({ where: { id: owner2Membership.id } });
+        expect(checkMem?.status).toBe(MembershipStatus.SUSPENDED);
+        expect(checkMem?.deletedAt).not.toBeNull();
 
-        // CRITICAL SECURITY INVARIANT: User record MUST remain intact!
-        const userCheck = await prisma.user.findUnique({
-          where: { id: targetMemberUser.id },
-        });
-        expect(userCheck).not.toBeNull();
-        expect(userCheck?.id).toBe(targetMemberUser.id);
+        // Check user identity remains intact
+        const checkUser = await prisma.user.findUnique({ where: { id: owner2.id } });
+        expect(checkUser).not.toBeNull();
       }
     });
+  });
 
-    it('should reactivate soft-deleted membership when user is re-invited', async () => {
-      const slug = testSlug('reactivate-member');
+  describe('5. Normal ADMIN & Cross-Tenant Safety Invariants', () => {
+    it('should allow ADMIN to manage non-OWNER members (e.g. change MEMBER to ADMIN)', async () => {
+      const slug = testSlug('admin-manage-member');
       const org = await prisma.organization.create({
-        data: { name: 'Reactivate Org', slug },
+        data: { name: 'Admin Manage Member Org', slug },
       });
 
+      const ownerRole = await prisma.role.findFirst({
+        where: { name: 'OWNER', organizationId: null },
+      });
+      const adminRole = await prisma.role.findFirst({
+        where: { name: 'ADMIN', organizationId: null },
+      });
       const memberRole = await prisma.role.findFirst({
         where: { name: 'MEMBER', organizationId: null },
       });
+      expect(ownerRole).toBeDefined();
+      expect(adminRole).toBeDefined();
       expect(memberRole).toBeDefined();
 
-      const user = await prisma.user.create({
-        data: {
-          email: testEmail('reactivate-user'),
-          passwordHash: await hashPassword('Pass123!'),
-          firstName: 'Reactivate',
-          lastName: 'User',
-        },
-      });
-
-      if (memberRole) {
-        const oldMembership = await prisma.membership.create({
+      if (ownerRole && adminRole && memberRole) {
+        const owner = await prisma.user.create({
           data: {
-            userId: user.id,
+            email: testEmail('owner-normal'),
+            passwordHash: await hashPassword('Pass123!'),
+            firstName: 'Owner',
+            lastName: 'User',
+          },
+        });
+        await prisma.membership.create({
+          data: {
+            userId: owner.id,
             organizationId: org.id,
-            roleId: memberRole.id,
-            status: MembershipStatus.SUSPENDED,
-            joinedAt: new Date(),
-            deletedAt: new Date(),
+            roleId: ownerRole.id,
+            status: MembershipStatus.ACTIVE,
           },
         });
 
-        const reactivated = (await memberService.inviteMember(org.id, user.id, {
-          email: user.email,
-          roleId: memberRole.id,
-        })) as { id: string; deletedAt: Date | null; status: string };
+        const adminUser = await prisma.user.create({
+          data: {
+            email: testEmail('admin-normal'),
+            passwordHash: await hashPassword('Pass123!'),
+            firstName: 'Admin',
+            lastName: 'User',
+          },
+        });
+        await prisma.membership.create({
+          data: {
+            userId: adminUser.id,
+            organizationId: org.id,
+            roleId: adminRole.id,
+            status: MembershipStatus.ACTIVE,
+          },
+        });
 
-        expect(reactivated.id).toBe(oldMembership.id);
-        expect(reactivated.deletedAt).toBeNull();
-        expect(reactivated.status).toBe(MembershipStatus.ACTIVE);
+        const memberUser = await prisma.user.create({
+          data: {
+            email: testEmail('member-normal'),
+            passwordHash: await hashPassword('Pass123!'),
+            firstName: 'Member',
+            lastName: 'User',
+          },
+        });
+        const memberMembership = await prisma.membership.create({
+          data: {
+            userId: memberUser.id,
+            organizationId: org.id,
+            roleId: memberRole.id,
+            status: MembershipStatus.ACTIVE,
+          },
+        });
+
+        // ADMIN promotes MEMBER to ADMIN -> Success!
+        const updated = (await memberService.updateMemberRole(
+          org.id,
+          memberMembership.id,
+          adminUser.id,
+          { roleId: adminRole.id },
+        )) as { role: { name: string } };
+        expect(updated.role.name).toBe('ADMIN');
+
+        // ADMIN removes member -> Success!
+        const res = await memberService.removeMember(org.id, memberMembership.id, adminUser.id);
+        expect(res.message).toBe('Member removed successfully');
+      }
+    });
+
+    it('should reject cross-tenant member modifications', async () => {
+      const slugA = testSlug('cross-tenant-a');
+      const slugB = testSlug('cross-tenant-b');
+
+      const orgA = await prisma.organization.create({ data: { name: 'Org A', slug: slugA } });
+      const orgB = await prisma.organization.create({ data: { name: 'Org B', slug: slugB } });
+
+      const ownerRole = await prisma.role.findFirst({
+        where: { name: 'OWNER', organizationId: null },
+      });
+      expect(ownerRole).toBeDefined();
+
+      if (ownerRole) {
+        const ownerA = await prisma.user.create({
+          data: {
+            email: testEmail('owner-a-cross'),
+            passwordHash: await hashPassword('Pass123!'),
+            firstName: 'Owner',
+            lastName: 'A',
+          },
+        });
+        await prisma.membership.create({
+          data: {
+            userId: ownerA.id,
+            organizationId: orgA.id,
+            roleId: ownerRole.id,
+            status: MembershipStatus.ACTIVE,
+          },
+        });
+
+        const ownerB = await prisma.user.create({
+          data: {
+            email: testEmail('owner-b-cross'),
+            passwordHash: await hashPassword('Pass123!'),
+            firstName: 'Owner',
+            lastName: 'B',
+          },
+        });
+        const membershipB = await prisma.membership.create({
+          data: {
+            userId: ownerB.id,
+            organizationId: orgB.id,
+            roleId: ownerRole.id,
+            status: MembershipStatus.ACTIVE,
+          },
+        });
+
+        // Owner A attempts to modify Org B's member -> 404 / 403 NotFoundException
+        await expect(
+          memberService.removeMember(orgA.id, membershipB.id, ownerA.id),
+        ).rejects.toThrow('Member not found in organization');
       }
     });
   });

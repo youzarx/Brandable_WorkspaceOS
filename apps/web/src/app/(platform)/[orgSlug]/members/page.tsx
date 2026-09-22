@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../../../../context/auth-context';
 import { api, ApiError } from '../../../../lib/api';
 import {
   Card,
@@ -40,6 +41,8 @@ interface MemberItem {
 }
 
 export default function MembersPage(): React.JSX.Element {
+  const { user: currentUser } = useAuth();
+
   const [members, setMembers] = useState<MemberItem[]>([]);
   const [roles, setRoles] = useState<MemberRole[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,6 +63,15 @@ export default function MembersPage(): React.JSX.Element {
   // Remove Member State
   const [removingMember, setRemovingMember] = useState<MemberItem | null>(null);
   const [removing, setRemoving] = useState(false);
+
+  // Ownership Privilege Check
+  const currentActorMember = members.find(
+    (m) => m.userId === currentUser?.id || m.user.id === currentUser?.id,
+  );
+  const isOwnerActor = currentActorMember?.role.name === 'OWNER';
+
+  // Filter assignable roles for non-owners
+  const assignableRoles = roles.filter((r) => isOwnerActor || r.name !== 'OWNER');
 
   useEffect(() => {
     void loadMembersAndRoles();
@@ -228,59 +240,78 @@ export default function MembersPage(): React.JSX.Element {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {members.map((member) => (
-                  <tr key={member.id} className="hover:bg-slate-50/50">
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-slate-900">
-                        {member.user.firstName || member.user.lastName
-                          ? `${member.user.firstName || ''} ${member.user.lastName || ''}`
-                          : 'User'}
-                      </div>
-                      <div className="text-xs text-slate-500">{member.user.email}</div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700 border border-blue-200">
-                        <Shield className="h-3 w-3" />
-                        {member.role.name}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
-                          member.status === 'ACTIVE'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-amber-100 text-amber-800'
-                        }`}
-                      >
-                        {member.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-500">
-                      {member.joinedAt ? new Date(member.joinedAt).toLocaleDateString() : 'Pending'}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setEditingMember(member);
-                            setNewRoleId(member.role.id);
-                          }}
+                {members.map((member) => {
+                  const isTargetOwner = member.role.name === 'OWNER';
+                  const canManageTarget = isOwnerActor || !isTargetOwner;
+
+                  return (
+                    <tr key={member.id} className="hover:bg-slate-50/50">
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-slate-900">
+                          {member.user.firstName || member.user.lastName
+                            ? `${member.user.firstName || ''} ${member.user.lastName || ''}`
+                            : 'User'}
+                        </div>
+                        <div className="text-xs text-slate-500">{member.user.email}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700 border border-blue-200">
+                          <Shield className="h-3 w-3" />
+                          {member.role.name}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            member.status === 'ACTIVE'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}
                         >
-                          Edit Role
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => setRemovingMember(member)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          {member.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-500">
+                        {member.joinedAt
+                          ? new Date(member.joinedAt).toLocaleDateString()
+                          : 'Pending'}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={!canManageTarget}
+                            title={
+                              !canManageTarget
+                                ? 'Only an OWNER can modify OWNER memberships'
+                                : undefined
+                            }
+                            onClick={() => {
+                              setEditingMember(member);
+                              setNewRoleId(member.role.id);
+                            }}
+                          >
+                            Edit Role
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            disabled={!canManageTarget}
+                            title={
+                              !canManageTarget
+                                ? 'Only an OWNER can remove OWNER memberships'
+                                : undefined
+                            }
+                            onClick={() => setRemovingMember(member)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -312,7 +343,7 @@ export default function MembersPage(): React.JSX.Element {
                   onChange={(e) => setInviteRoleId(e.target.value)}
                   className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
                 >
-                  {roles.map((r) => (
+                  {assignableRoles.map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.name} {r.description ? `(${r.description})` : ''}
                     </option>
@@ -354,7 +385,7 @@ export default function MembersPage(): React.JSX.Element {
                   onChange={(e) => setNewRoleId(e.target.value)}
                   className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
                 >
-                  {roles.map((r) => (
+                  {assignableRoles.map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.name} {r.description ? `(${r.description})` : ''}
                     </option>
