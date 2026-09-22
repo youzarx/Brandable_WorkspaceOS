@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Continuous Integration
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: platform
+          POSTGRES_PASSWORD: platform
+          POSTGRES_DB: platform_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U platform -d platform_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://platform:platform@localhost:5432/platform_test
+      REDIS_URL: redis://localhost:6379
+      JWT_ACCESS_SECRET: ci-test-jwt-access-secret-minimum-32-chars-long!
+      COOKIE_SECRET: ci-test-cookie-secret-minimum-32-chars-long!
+      WORKER_ENABLED: 'true'
+      QUEUE_PREFIX: platform_queue_test
+      WORKER_CONCURRENCY: 5
+      CORS_ORIGIN: http://localhost:3000
+      LOG_LEVEL: info
+      NEXT_PUBLIC_API_URL: http://localhost:3001/api/v1
+      NEXT_PUBLIC_APP_NAME: Platform
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Display CI environment summary
+        run: |
+          echo "=== CI Environment Summary ==="
+          echo "Node version: $(node -v)"
+          echo "pnpm version: $(pnpm -v)"
+          echo "PostgreSQL target: PostgreSQL 16-alpine (service container)"
+          echo "Redis target: Redis 7-alpine (service container)"
+
+      - name: Generate Prisma Client
+        run: pnpm db:generate
+
+      - name: Run Database Migrations
+        run: pnpm db:migrate
+
+      - name: Seed Foundation Data
+        run: pnpm db:seed
+
+      - name: Check Formatting
+        run: pnpm format:check
+
+      - name: Run ESLint
+        run: pnpm lint
+
+      - name: Run Type Checking
+        run: pnpm typecheck
+
+      - name: Run Workspace Test Suites
+        run: pnpm test
+
+      - name: Run Workspace Production Build
+        run: pnpm build

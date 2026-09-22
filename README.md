@@ -190,17 +190,34 @@ See [`docs/architecture.md`](docs/architecture.md) for the full architecture doc
 
 ---
 
-## CI
+## CI / CD Pipeline (GitHub Actions)
 
-GitHub Actions runs on every push to `main` and every pull request:
+The repository uses GitHub Actions (`.github/workflows/ci.yml`) to automatically validate every push to `main` and all pull requests.
 
-- `pnpm install`
-- `pnpm lint`
-- `pnpm typecheck`
-- `pnpm test`
-- `pnpm build`
+### Pipeline Execution Flow
 
-All checks must pass before merging.
+1. **Environment Setup:** Node.js 24 + pnpm 10
+2. **Service Containers:** PostgreSQL 16 (`postgres:16-alpine` on port 5432) & Redis 7 (`redis:7-alpine` on port 6379)
+3. **Dependency Installation:** `pnpm install --frozen-lockfile`
+4. **Database Migration & Seed:** `pnpm db:generate` → `pnpm db:migrate` → `pnpm db:seed`
+5. **Quality Gates:**
+   - Prettier check: `pnpm format:check`
+   - Linting: `pnpm lint`
+   - Type checking: `pnpm typecheck`
+   - Test suites: `pnpm test` (Database 28/28, API 11/11, Worker 12/12, Auth 9/9, Validation 10/10, Web 3/3, UI 2/2)
+   - Production build: `pnpm build`
+
+### Reproducing CI Locally
+
+To run the full suite of checks locally prior to committing:
+
+```bash
+pnpm format:check
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build
+```
 
 ---
 
