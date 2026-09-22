@@ -45,6 +45,7 @@ export const updateOrganizationSchema = z.object({
     .min(1, 'Organization name is required')
     .max(255, 'Organization name is too long')
     .optional(),
+  slug: slugSchema.optional(),
   logo: z.string().url('Logo must be a valid URL').optional(),
   favicon: z.string().url('Favicon must be a valid URL').optional(),
   primaryColor: hexColorSchema,

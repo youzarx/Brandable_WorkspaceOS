@@ -35,6 +35,18 @@ export { Prisma } from '@prisma/client';
 
 // Re-export generated model types and enums
 export { MembershipStatus } from '@prisma/client';
+export type {
+  User,
+  Organization,
+  Membership,
+  Role,
+  Permission,
+  RolePermission,
+  Module,
+  OrganizationModule,
+  RefreshToken,
+  AuditLog,
+} from '@prisma/client';
 
 // Export the factory for testing
 export { createPrismaClient };

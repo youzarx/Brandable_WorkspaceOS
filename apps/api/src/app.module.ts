@@ -4,6 +4,8 @@ import { ApiConfigModule } from './config/api-config.module.js';
 import { DatabaseModule } from './database/database.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { HealthModule } from './modules/health/health.module.js';
+import { OrganizationModule } from './modules/organization/organization.module.js';
+import { MemberModule } from './modules/member/member.module.js';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard.js';
 import { MembershipGuard } from './common/guards/membership.guard.js';
 import { ModuleGuard } from './common/guards/module.guard.js';
@@ -14,7 +16,14 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
 import { TenantService } from './common/services/tenant.service.js';
 
 @Module({
-  imports: [ApiConfigModule, DatabaseModule, AuthModule, HealthModule],
+  imports: [
+    ApiConfigModule,
+    DatabaseModule,
+    AuthModule,
+    HealthModule,
+    OrganizationModule,
+    MemberModule,
+  ],
   providers: [
     TenantService,
     {

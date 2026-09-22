@@ -14,7 +14,12 @@ export {
   type UpdateOrganizationInput,
 } from './organization';
 
-export { inviteMemberSchema, type InviteMemberInput } from './membership';
+export {
+  inviteMemberSchema,
+  type InviteMemberInput,
+  updateMemberRoleSchema,
+  type UpdateMemberRoleInput,
+} from './membership';
 
 export { createRoleSchema, type CreateRoleInput } from './role';
 

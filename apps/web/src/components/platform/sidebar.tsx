@@ -84,6 +84,34 @@ export function Sidebar({ orgSlug, isOpen, onClose }: SidebarProps): React.JSX.E
             <span>Dashboard</span>
           </Link>
 
+          {/* Members Link */}
+          <Link
+            href={`/${orgSlug}/members`}
+            className={cn(
+              'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+              pathname === `/${orgSlug}/members`
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-300 hover:bg-slate-800 hover:text-white',
+            )}
+          >
+            <Users className="h-4 w-4" />
+            <span>Members</span>
+          </Link>
+
+          {/* Settings Link */}
+          <Link
+            href={`/${orgSlug}/settings`}
+            className={cn(
+              'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+              pathname === `/${orgSlug}/settings`
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-300 hover:bg-slate-800 hover:text-white',
+            )}
+          >
+            <Shield className="h-4 w-4" />
+            <span>Settings</span>
+          </Link>
+
           <div className="pt-4 pb-2 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
             Platform Modules
           </div>
