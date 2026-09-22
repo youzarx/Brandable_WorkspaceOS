@@ -1,12 +1,4 @@
-import {
-  Controller,
-  Get,
-  Patch,
-  Body,
-  UseGuards,
-  HttpCode,
-  HttpStatus,
-} from '@nestjs/common';
+import { Controller, Get, Patch, Body, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
 import { OrganizationService } from './organization.service.js';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
 import { MembershipGuard } from '../../common/guards/membership.guard.js';
